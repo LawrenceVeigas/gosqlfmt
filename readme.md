@@ -1,26 +1,17 @@
-## gosqlfmt
+# gosqlfmt
+
+This project is being developed to format databricks flavoured queries.
 
 ### To do
 
--
-
-### Rough space
-
-#### get tables
-
-```
-where
-	a.dt between ${hiveconf:start_date} and ${hiveconf:end_date}
-	and a.status = 'COMPLETED'
-```
-
-```
-lateral view explode (a.discount_bifurcation :restaurant_funded_discount :offer_ids) d
-left join excel.do_city_mapping b
-on a.cityid = b.id
-left join excel.do_dm_users c
-on a.customer_id = c.user_id
-```
-
-- (?i)from(.\*)(?=where|group by|order by|having|qualify)
-- (?i)from(.\*)
+- assign random string to contents of each bracket
+- write function to parse contents of bracket and categorize query as
+  - create or replace AS
+  - create or replace (
+  - insert
+  - merge
+  - select :check
+  - delete
+  - set
+- post categorization of query, run respective format function to format the contents of the bracket
+- once formatted, replace random string with new formatted text
