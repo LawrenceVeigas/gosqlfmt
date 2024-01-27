@@ -19,14 +19,14 @@ var (
 	selectcolumns = regexp.MustCompile(`(?i)select(.*?)from`)
 	fmtcolumns    = regexp.MustCompile(`(?i),\s`)
 
-	fromtables  = regexp.MustCompile(`(?i)from(.*)(where|group by|order by|having|qualify)(.*)`)
+	fromtables  = regexp.MustCompile(`(?i)from(.*?)(where|group by|order by|having|qualify)(.*)`)
 	fromtables2 = regexp.MustCompile(`(?i)from(.*)`)
 	fmttables   = regexp.MustCompile(`(?i)(^[a-zA-Z][a-zA-Z\._0-9]*[\s]*[a-zA-Z0-9]*)\s*((left|right|full|join|lateral)*(.*))`)
 	joins_etc   = regexp.MustCompile(`(?i)(lateral|left|right|full)`)
 
-	wherecond  = regexp.MustCompile(`(?i)where(.*)(group by|order by|having|qualify)`)
+	wherecond  = regexp.MustCompile(`(?i)where(.*)(group by|order by|having|qualify)(.*)`)
 	wherecond2 = regexp.MustCompile(`(?i)where(.*)`)
-	fmtwhere   = regexp.MustCompile(`(?i)(and|or)`)
+	fmtwhere   = regexp.MustCompile(`(?i)(and|or)\s`)
 )
 
 func CleanQuery(query string) string {
@@ -125,6 +125,8 @@ func ReplaceBrackets(query string) string {
 }
 
 func FormatSelect(query string) string {
+	query = ReplaceBrackets(query)
+	log.Debugf("Query passed to FormatSelect:\n%v\n", query)
 	// logger.Println("Formatting columns...")
 	// FORMAT COLUMNS
 	log.Debugf("Query under consideration:\n%v\n\n", query)
@@ -138,9 +140,13 @@ func FormatSelect(query string) string {
 
 	returnquery := "\nselect\n" + columns
 
-	// logger.Println("Formatting from clause...")
 	// FORMAT TABLES
 	table_li := fromtables.FindStringSubmatch(query)
+
+	for i := range table_li {
+		log.Debugf("Tables:\n%v: %v\n", i, table_li[i])
+	}
+
 	var tables string
 	if len(table_li) == 0 {
 		tables = fromtables2.FindStringSubmatch(query)[1]
@@ -177,8 +183,9 @@ func FormatSelect(query string) string {
 
 			conds = where_li[1]
 			conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
-			conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1")))
+			conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
 			returnquery = returnquery + "\nwhere\n\t" + conds
+			log.Debugf("Query post WHERE processing:\n%v\n", returnquery)
 		}
 	} else {
 		for t := range conditions {
@@ -186,10 +193,12 @@ func FormatSelect(query string) string {
 		}
 		conds = conditions[1]
 		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
-		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1")))
+		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
 		returnquery = returnquery + "\nwhere\n\t" + conds
+		log.Debugf("Query post WHERE processing:\n%v\n", returnquery)
 	}
 
+	returnquery = unwrapbrackets(returnquery)
 	return returnquery
 }
 
