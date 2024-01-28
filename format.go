@@ -9,8 +9,11 @@ import (
 )
 
 func init() {
-	log.SetFormatter(&log.TextFormatter{
-		// TimestampFormat: "2006-01-02 15:04:05",
+	// log.SetFormatter(&log.TextFormatter{
+	// 	TimestampFormat: "15:04:05",
+	// })
+
+	log.SetFormatter(&log.JSONFormatter{
 		TimestampFormat: "15:04:05",
 	})
 
