@@ -138,7 +138,7 @@ func FormatSelect(query string) string {
 	columns = string(fmtcolumns.ReplaceAll([]byte(columns), []byte(",\n\t")))
 	columns = string(firstline.ReplaceAll([]byte(columns), []byte("\t$1")))
 
-	returnquery := "\nselect\n" + columns
+	returnquery := "select\n" + columns
 
 	// FORMAT TABLES
 	table_li := fromtables.FindStringSubmatch(query)
@@ -203,20 +203,20 @@ func FormatSelect(query string) string {
 }
 
 func FormatCTE(query string) string {
-	withre := regexp.MustCompile(`(?i)^(with\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
-	nextctere := regexp.MustCompile(`(?i)(.*)(\),\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
+	// withre := regexp.MustCompile(`(?i)^(with\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
+	// nextctere := regexp.MustCompile(`(?i)(.*)(\),\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
 	cteselect := regexp.MustCompile(`(?i)(\))\s(.*)`)
 
 	// log.Debugf("CTE Query:\n%v\n\n", query)
-	query = ReplaceBrackets(query)
+	returnquery := ReplaceBrackets(query)
 
 	// match := nextctere.Match([]byte(query))
 	// log.Info(match)
 
-	returnquery := string(withre.ReplaceAll([]byte(query), []byte("$1\n\t$2\n$3")))
+	// returnquery := string(withre.ReplaceAll([]byte(query), []byte("$1\n\t$2\n$3")))
 	// log.Debugf("Formatted with:\n%v\n", returnquery)
 
-	returnquery = string(nextctere.ReplaceAll([]byte(returnquery), []byte("$1$2\n\t$3\n$4")))
+	// returnquery = string(nextctere.ReplaceAll([]byte(returnquery), []byte("$1$2\n\t$3\n$4")))
 
 	// log.Debugf("Formatted with:\n%v\n", returnquery)
 
@@ -253,8 +253,28 @@ func unwrapbrackets(query string) string {
 				log.Debugf("Formatted query in unwrap func:\n%v\n\n", q)
 
 				q = unwrapbrackets(q)
-				// match = false
-				// break
+
+				p := regexp.MustCompile(`(?i)\n*(?P<space>\s*)(.*)` + k + `.*`)
+				matches := p.FindStringSubmatch(returnquery)
+				matchedspace := matches[p.SubexpIndex("space")]
+				// log.Debugf("String found\n%v\n", line)
+				// log.Debugf("Submatch found\n%v\n", matchedspace)
+				// log.Debugf("Submatch length\n%v\n", len(matchedspace))
+
+				indent := "\t\t"
+
+				if strings.HasPrefix(q, "select") {
+					startofline := regexp.MustCompile(`(?m)^`)
+					start := regexp.MustCompile(`(?i)\A`)
+
+					q = start.ReplaceAllString(q, "\n")
+					q = startofline.ReplaceAllString(q, indent)
+
+					endingbracket := regexp.MustCompile(`(?i)(` + k + `)(\))`)
+					log.Debugf("Ending bracket:\n%v\n", endingbracket.FindStringSubmatch(returnquery))
+					returnquery = endingbracket.ReplaceAllString(returnquery, "$1\n"+matchedspace+"$2")
+				}
+
 				returnquery = strings.ReplaceAll(returnquery, k, q)
 				log.Debugf("Returned query after final unwrap\n%v\n", returnquery)
 			}

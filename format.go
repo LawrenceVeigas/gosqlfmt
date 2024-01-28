@@ -65,5 +65,11 @@ func FormatQuery(fileName string) string {
 			finalQuery = strings.TrimSpace(query)
 		}
 	}
+
+	err := os.WriteFile(fileName, []byte(finalQuery), 0644)
+	if err != nil {
+		log.Fatalf("Error writing to file..\n%v", err)
+	}
+
 	return finalQuery
 }
