@@ -24,7 +24,8 @@ var (
 	fmttables   = regexp.MustCompile(`(?i)(^[a-zA-Z][a-zA-Z\._0-9]*[\s]*[a-zA-Z0-9]*)\s*((left|right|full|join|lateral)*(.*))`)
 	joins_etc   = regexp.MustCompile(`(?i)(lateral|left|right|full)`)
 
-	wherecond  = regexp.MustCompile(`(?i)where(.*)(group by|order by|having|qualify)(.*)`)
+	// TODO: debug why aggregation clause aren't covered in wherecond regexp
+	wherecond  = regexp.MustCompile(`(?i)where(.*?)(group by|order by|having|qualify)(.*)`)
 	wherecond2 = regexp.MustCompile(`(?i)where(.*)`)
 	fmtwhere   = regexp.MustCompile(`(?i)(and|or)\s`)
 )
@@ -127,7 +128,7 @@ func ReplaceBrackets(query string) string {
 func FormatSelect(query string) string {
 	query = ReplaceBrackets(query)
 	log.Debugf("Query passed to FormatSelect:\n%v\n", query)
-	// logger.Println("Formatting columns...")
+
 	// FORMAT COLUMNS
 	log.Debugf("Query under consideration:\n%v\n\n", query)
 	log.Debugf("Checking for columns in select:\t%v\n\n", selectcolumns.Match([]byte(query)))
@@ -149,8 +150,10 @@ func FormatSelect(query string) string {
 
 	var tables string
 	if len(table_li) == 0 {
+		log.Debugf("FROM regexp 2")
 		tables = fromtables2.FindStringSubmatch(query)[1]
 	} else {
+		log.Debugf("FROM regexp 1")
 		tables = table_li[1]
 	}
 
@@ -171,10 +174,12 @@ func FormatSelect(query string) string {
 	}
 
 	log.Info("Formatting where clause...")
+
 	// FORMAT WHERE
 	conditions := wherecond.FindStringSubmatch(query)
 	var conds string
 	if len(conditions) == 0 {
+		log.Debugf("WHERE regexp 2")
 		where_li := wherecond2.FindStringSubmatch(query)
 		if len(where_li) > 0 {
 			for t := range where_li {
@@ -188,12 +193,13 @@ func FormatSelect(query string) string {
 			log.Debugf("Query post WHERE processing:\n%v\n", returnquery)
 		}
 	} else {
+		log.Debugf("WHERE regexp 1")
 		for t := range conditions {
 			log.Debugf("Conditions in WHERE:%v: %v\n", t, conditions[t])
 		}
 		conds = conditions[1]
 		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
-		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
+		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2 $3")))
 		returnquery = returnquery + "\nwhere\n\t" + conds
 		log.Debugf("Query post WHERE processing:\n%v\n", returnquery)
 	}
@@ -203,22 +209,9 @@ func FormatSelect(query string) string {
 }
 
 func FormatCTE(query string) string {
-	// withre := regexp.MustCompile(`(?i)^(with\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
-	// nextctere := regexp.MustCompile(`(?i)(.*)(\),\s[a-zA-Z0-9_]*\sas\s\()(.*?)(\))`)
 	cteselect := regexp.MustCompile(`(?i)(\))\s(.*)`)
 
-	// log.Debugf("CTE Query:\n%v\n\n", query)
 	returnquery := ReplaceBrackets(query)
-
-	// match := nextctere.Match([]byte(query))
-	// log.Info(match)
-
-	// returnquery := string(withre.ReplaceAll([]byte(query), []byte("$1\n\t$2\n$3")))
-	// log.Debugf("Formatted with:\n%v\n", returnquery)
-
-	// returnquery = string(nextctere.ReplaceAll([]byte(returnquery), []byte("$1$2\n\t$3\n$4")))
-
-	// log.Debugf("Formatted with:\n%v\n", returnquery)
 
 	selectstmt := cteselect.FindStringSubmatch(returnquery)[2]
 	fmtselectstmt := FormatSelect(selectstmt)
@@ -244,7 +237,6 @@ func unwrapbrackets(query string) string {
 		}
 
 		for k, v := range mapper {
-			// log.Debugf("key:\t%v\nvalue:\t%v\n", k, v)
 			match = strings.Contains(returnquery, k)
 
 			if match {
@@ -257,9 +249,6 @@ func unwrapbrackets(query string) string {
 				p := regexp.MustCompile(`(?i)\n*(?P<space>\s*)(.*)` + k + `.*`)
 				matches := p.FindStringSubmatch(returnquery)
 				matchedspace := matches[p.SubexpIndex("space")]
-				// log.Debugf("String found\n%v\n", line)
-				// log.Debugf("Submatch found\n%v\n", matchedspace)
-				// log.Debugf("Submatch length\n%v\n", len(matchedspace))
 
 				indent := "\t\t"
 
