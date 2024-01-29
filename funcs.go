@@ -177,7 +177,6 @@ func FormatSelect(query string) string {
 
 	// FORMAT WHERE
 	conditions := wherecond.FindStringSubmatch(query)
-	var conds string
 	if len(conditions) == 0 {
 		log.Debugf("WHERE regexp 2")
 		where_li := wherecond2.FindStringSubmatch(query)
@@ -186,7 +185,7 @@ func FormatSelect(query string) string {
 				log.Debugf("Conditions in WHERE:%v: %v\n", t, where_li[t])
 			}
 
-			conds = where_li[1]
+			conds := where_li[1]
 			conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
 			conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
 			returnquery = returnquery + "\nwhere\n\t" + conds
@@ -197,11 +196,72 @@ func FormatSelect(query string) string {
 		for t := range conditions {
 			log.Debugf("Conditions in WHERE:%v: %v\n", t, conditions[t])
 		}
-		conds = conditions[1]
+		conds := conditions[1]
 		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
-		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2 $3")))
+		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
 		returnquery = returnquery + "\nwhere\n\t" + conds
 		log.Debugf("Query post WHERE processing:\n%v\n", returnquery)
+	}
+
+	g := regexp.MustCompile(`(?i)group\sby(.*?)(having|qualify)(.*)`)
+	g2 := regexp.MustCompile(`(?i)group\sby(.*)`)
+	if g.MatchString(query) {
+		log.Debugf("Matched GROUP BY regexp 1")
+		groupby := g.FindStringSubmatch(query)
+		log.Debugf("Matched string: %v\n", groupby)
+
+		conds := groupby[1]
+		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
+		conds = string(fmtcolumns.ReplaceAll([]byte(conds), []byte(",\n\t")))
+		returnquery = returnquery + "\ngroup by\n\t" + conds
+		log.Debugf("Query post GROUP BY processing:\n%v\n", returnquery)
+	} else if g2.MatchString(query) {
+		log.Debugf("Matched GROUP BY regexp 2")
+		groupby := g2.FindStringSubmatch(query)
+		log.Debugf("Matched string: %v\n", groupby)
+
+		conds := groupby[1]
+		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
+		conds = string(fmtcolumns.ReplaceAll([]byte(conds), []byte(",\n\t")))
+		returnquery = returnquery + "\ngroup by\n\t" + conds
+		log.Debugf("Query post GROUP BY processing:\n%v\n", returnquery)
+	}
+
+	h := regexp.MustCompile(`(?i)(having|qualify)(.*?)(order by)(.*)`)
+	h2 := regexp.MustCompile(`(?i)(having|qualify)(.*)`)
+	if h.MatchString(query) {
+		log.Debugf("Matched HAVING/QUALIFY regexp 1")
+		having := h.FindStringSubmatch(query)
+		log.Debugf("Matched string: %v\n", having)
+
+		conds := having[2]
+		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
+		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
+		returnquery = returnquery + "\nhaving\n\t" + conds
+		log.Debugf("Query post HAVING/QUALIFY processing:\n%v\n", returnquery)
+	} else if h2.MatchString(query) {
+		log.Debugf("Matched HAVING/QUALIFY regexp 2")
+		having := h2.FindStringSubmatch(query)
+		log.Debugf("Matched string: %v\n", having)
+
+		conds := having[2]
+		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
+		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
+		returnquery = returnquery + "\nhaving\n\t" + conds
+		log.Debugf("Query post HAVING/QUALIFY processing:\n%v\n", returnquery)
+	}
+
+	o := regexp.MustCompile(`(?i)order\sby(.*)`)
+	if o.MatchString(query) {
+		log.Debugf("Matched ORDER BY regexp 1")
+		orderby := o.FindStringSubmatch(query)
+		log.Debugf("Matched string: %v\n", orderby)
+
+		conds := orderby[1]
+		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
+		conds = string(fmtcolumns.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
+		returnquery = returnquery + "\norder by\n\t" + conds
+		log.Debugf("Query post ORDER BY processing:\n%v\n", returnquery)
 	}
 
 	returnquery = unwrapbrackets(returnquery)
