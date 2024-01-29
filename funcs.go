@@ -21,13 +21,13 @@ var (
 
 	fromtables  = regexp.MustCompile(`(?i)from(.*?)(where|group by|order by|having|qualify)(.*)`)
 	fromtables2 = regexp.MustCompile(`(?i)from(.*)`)
-	fmttables   = regexp.MustCompile(`(?i)(^[a-zA-Z][a-zA-Z\._0-9]*[\s]*[a-zA-Z0-9]*)\s*((left|right|full|join|lateral)*(.*))`)
-	joins_etc   = regexp.MustCompile(`(?i)(lateral|left|right|full)`)
+	fmttables   = regexp.MustCompile(`(?i)(^[a-zA-Z][a-zA-Z\._0-9]*[\s]*[a-zA-Z0-9]*)\s*((left|right|inner|full|join|lateral)*(.*))`)
+	joins_etc   = regexp.MustCompile(`(?i)(lateral|inner|left|right|full)`)
 
 	// TODO: debug why aggregation clause aren't covered in wherecond regexp
 	wherecond  = regexp.MustCompile(`(?i)where(.*?)(group by|order by|having|qualify)(.*)`)
 	wherecond2 = regexp.MustCompile(`(?i)where(.*)`)
-	fmtwhere   = regexp.MustCompile(`(?i)(and|or)\s`)
+	fmtwhere   = regexp.MustCompile(`(?i)(on|and|or)\s`)
 )
 
 func CleanQuery(query string) string {
@@ -40,6 +40,28 @@ func CleanQuery(query string) string {
 
 	// remove leading/trailing whitespace
 	query = strings.TrimSpace(query)
+
+	// clean keywords e.g. with data as( =? with data as (
+	for key := range KEYWORDS {
+		pat1 := regexp.MustCompile(`(?i)(\b` + KEYWORDS[key] + `\b)([a-zA-Z0-9\(\)]+)`)
+		pat2 := regexp.MustCompile(`(?i)([a-zA-Z0-9\(\)]+)(\b` + KEYWORDS[key] + `\b)`)
+
+		if pat1.MatchString(query) {
+			log.Debugf("Keyword cleaning in %v:%v\n", KEYWORDS[key], pat1.FindString(query))
+			query = pat1.ReplaceAllString(query, "$1 $2")
+		}
+
+		if pat2.MatchString(query) {
+			log.Debugf("Keyword cleaning in %v:%v\n", KEYWORDS[key], pat2.FindString(query))
+			query = pat2.ReplaceAllString(query, "$1 $2")
+		}
+	}
+
+	// add space after comma
+	pat := regexp.MustCompile(`(?i),([a-zA-Z0-9_]+)`)
+	query = pat.ReplaceAllString(query, ", $1")
+
+	log.Infof("Final Cleaned Query:\n%v\n\n", query)
 
 	return query
 }
@@ -77,8 +99,13 @@ func ReplaceBrackets(query string) string {
 	openBracketIndices := regexp.MustCompile(`\(`).FindAllStringIndex(query, -1)
 
 	for i := range openBracketIndices {
-		openBracketIndex = append(openBracketIndex, openBracketIndices[i][1])
+		openBracketIndex = append(openBracketIndex, openBracketIndices[i][0])
 		closeBracketIndex = append(closeBracketIndex, findPos(query, openBracketIndex[i]))
+	}
+
+	// inc. opening positions by 1
+	for i := range openBracketIndex {
+		openBracketIndex[i] = openBracketIndex[i] + 1
 	}
 
 	log.Debugf("Opening bracket indices:\t%v\n", openBracketIndex)
@@ -109,19 +136,24 @@ func ReplaceBrackets(query string) string {
 	returnquery := query
 
 	for i := range swapopen {
-		text := query[swapopen[i]:swapclose[i]]
-		log.Info(text)
-		for key, value := range mapper {
-			if strings.Contains(text, value) {
-				text = strings.ReplaceAll(text, value, key)
+		if swapopen[i] < swapclose[i] {
+			text := query[swapopen[i]:swapclose[i]]
+			log.Infof("Indices: %v-%v\n%v", swapopen[i], swapclose[i], text)
+			for key, value := range mapper {
+				if strings.Contains(text, value) {
+					text = strings.ReplaceAll(text, value, key)
+				}
 			}
+
+			randvar := RandStringBytes(10)
+			mapper[randvar] = text
+
+			returnquery = strings.ReplaceAll(returnquery, text, randvar)
 		}
-
-		randvar := RandStringBytes(10)
-		mapper[randvar] = text
-
-		returnquery = strings.ReplaceAll(returnquery, text, randvar)
 	}
+
+	log.Infof("Final Replaced Query:\n%v\n\n", returnquery)
+
 	return returnquery
 }
 
@@ -157,20 +189,30 @@ func FormatSelect(query string) string {
 		tables = table_li[1]
 	}
 
+	log.Debugf("BREAKPOINT: %v\n", tables)
+
 	log.Info("Parsing from clause...")
 	tables = string(firstline.ReplaceAll([]byte(tables), []byte("")))
 	joins_li := fmttables.FindStringSubmatch(tables)
-	primary_table := joins_li[1]
-	log.Debugf("Primary table:%v\n", primary_table)
-	log.Debugf("Joins found:%v\n", joins_li)
 
-	returnquery = returnquery + "\nfrom\n\t" + primary_table
+	if len(joins_li) >= 1 {
+		primary_table := joins_li[1]
+		log.Debugf("Primary table:%v\n", primary_table)
+		log.Debugf("Joins found:%v\n", joins_li)
+		returnquery = returnquery + "\nfrom\n\t" + primary_table
 
-	var joins string
-	if len(joins_li) >= 2 {
-		joins = joins_li[2]
-		joins = string(joins_etc.ReplaceAll([]byte(joins), []byte("\n\t$1")))
-		returnquery = returnquery + joins
+		var joins string
+		if len(joins_li) >= 2 {
+			joins = joins_li[2]
+			joins = string(joins_etc.ReplaceAllString(joins, "\n\t$1"))
+			joins = string(fmtwhere.ReplaceAllString(joins, "\n\t$1 $2"))
+			returnquery = returnquery + joins
+		}
+	} else {
+		// TODO: what if there is a where condition followed by the brackets?
+		// This part of the code was written to solve for "select * from (select * from some table)"
+		// What if the query was changed to "select * from (select * from some table) where conditions..."?
+		returnquery = returnquery + "\nfrom\n\t" + tables
 	}
 
 	log.Info("Formatting where clause...")
@@ -237,7 +279,7 @@ func FormatSelect(query string) string {
 		conds := having[2]
 		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
 		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
-		returnquery = returnquery + "\nhaving\n\t" + conds
+		returnquery = returnquery + "\n" + having[1] + "\n\t" + conds
 		log.Debugf("Query post HAVING/QUALIFY processing:\n%v\n", returnquery)
 	} else if h2.MatchString(query) {
 		log.Debugf("Matched HAVING/QUALIFY regexp 2")
@@ -247,7 +289,7 @@ func FormatSelect(query string) string {
 		conds := having[2]
 		conds = string(firstline.ReplaceAll([]byte(conds), []byte("")))
 		conds = string(fmtwhere.ReplaceAll([]byte(conds), []byte("\n\t$1 $2")))
-		returnquery = returnquery + "\nhaving\n\t" + conds
+		returnquery = returnquery + "\n" + having[1] + "\n\t" + conds
 		log.Debugf("Query post HAVING/QUALIFY processing:\n%v\n", returnquery)
 	}
 
