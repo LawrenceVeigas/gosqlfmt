@@ -9,13 +9,13 @@ import (
 )
 
 func init() {
-	// log.SetFormatter(&log.TextFormatter{
-	// 	TimestampFormat: "15:04:05",
-	// })
-
-	log.SetFormatter(&log.JSONFormatter{
+	log.SetFormatter(&log.TextFormatter{
 		TimestampFormat: "15:04:05",
 	})
+
+	// log.SetFormatter(&log.JSONFormatter{
+	// 	TimestampFormat: "15:04:05",
+	// })
 
 	log.SetOutput(os.Stdout)
 
@@ -69,10 +69,10 @@ func FormatQuery(fileName string) string {
 		}
 	}
 
-	err := os.WriteFile(fileName, []byte(finalQuery), 0644)
-	if err != nil {
-		log.Fatalf("Error writing to file..\n%v", err)
-	}
+	// err := os.WriteFile(fileName, []byte(finalQuery), 0644)
+	// if err != nil {
+	// 	log.Fatalf("Error writing to file..\n%v", err)
+	// }
 
 	return finalQuery
 }
